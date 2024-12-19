@@ -1,0 +1,309 @@
+from flask import Flask, request, jsonify
+import cv2
+import numpy as np
+
+app = Flask(__name__)
+
+# Function to detect marked answers (circles) and black squares
+def detect_marked_answers(image_path):
+    img = cv2.imread(image_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Blur to reduce noise and improve circle detection accuracy
+    blurred = cv2.GaussianBlur(gray, (9, 9), 2)
+
+    # Hough Circle Transform for circle detection
+    circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, dp=1, minDist=11,
+                               param1=488, param2=10, minRadius=9, maxRadius=15)
+
+    marked_answers = []
+    if circles is not None:
+        circles = np.uint16(np.around(circles))  # Round circle coordinates
+        for circle in circles[0, :]:
+            x, y, r = circle  # Center coordinates (x, y) and radius
+            
+            # Create mask for the circle
+            mask = np.zeros_like(gray)
+            cv2.circle(mask, (x, y), r, 255, -1)  # Create filled circle in mask
+
+            # Count the number of black pixels inside the circle
+            filled_area = cv2.countNonZero(cv2.bitwise_and(gray, gray, mask=mask))
+
+            # If there are black pixels inside the circle, consider it filled
+            if filled_area > 80:  # You can adjust this threshold
+                marked_answers.append((x, y))
+                # Mark the filled circle
+                cv2.circle(img, (x, y), r, (0, 255, 0), 2)  # Mark with green color
+
+    # Detect black squares
+    square_count, square_coordinates = detect_black_squares(gray, img)
+
+    # Save the detection results
+    cv2.imwrite("output_detected_answers_and_squares.png", img)  # Save the marked image
+
+    return len(marked_answers), marked_answers, square_count, square_coordinates
+
+def detect_black_squares(gray, img):
+    # Threshold the image to get a binary image where black areas are white
+    _, binary = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)  # Adjust this value as needed
+
+    # Apply morphological operations to clean up the image
+    kernel = np.ones((3, 3), np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)  # Close small holes
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)   # Remove small noise
+
+    # Find contours in the binary image
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    square_coordinates = []
+
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area > 100:  # Adjusted area threshold for better accuracy
+            epsilon = 0.02 * cv2.arcLength(contour, True)  # Adjust epsilon for contour approximation
+            approx = cv2.approxPolyDP(contour, epsilon, True)
+
+            if len(approx) == 4:  # If there are 4 corners, it's likely a square
+                # Calculate aspect ratio to filter out non-square shapes
+                x, y, w, h = cv2.boundingRect(approx)
+                aspect_ratio = float(w) / h
+                if 0.8 <= aspect_ratio <= 1.2:  # Check if the shape is close to a square
+                    # Extract the coordinates of the square in (x, y) format as integers
+                    square_coords = [(int(point[0][0]), int(point[0][1])) for point in approx]
+                    square_coordinates.extend(square_coords)  # Flatten the list of coordinates
+
+                    # Determine the color based on the index of the square
+                    square_index = len(square_coordinates) // 4 - 1  # Get the current square index
+                    color = (0, 0, 255)  # Default color is red (BGR format)
+
+                    if square_index == 2:  # If it's the third square (index 2)
+                        color = (0, 165, 255)  # Change color to orange
+
+                    # Draw the square with the determined color
+                    cv2.drawContours(img, [approx], -1, color, 2)  # Mark square with the specified color
+
+    return len(square_coordinates) // 4, square_coordinates  # Return count and flat coordinates
+
+
+# Route for uploading images and detecting answers
+@app.route('/test', methods=['POST'])
+def process_image():
+    if 'file' not in request.files:
+        return jsonify({"status": "error", "message": "No file provided"})
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"status": "error", "message": "No selected file"})
+
+    filepath = "uploaded_image.png"
+    file.save(filepath)
+
+    # Call the answer detection function
+    marked_answers_count, marked_answers, square_count, square_coordinates = detect_marked_answers(filepath)
+
+    # Example output
+    print("Marked Answers Count:", marked_answers_count)
+    print("Marked Answers:", marked_answers)
+    print("Square Count:", square_count)
+    print("Square Coordinates:", square_coordinates)
+
+    # Call the answer detection function
+    try:
+        marked_answers_count, marked_answers, square_count, square_coordinates = detect_marked_answers(filepath)
+        return jsonify({
+            "status": "success",
+            "message": "Image processed successfully",
+            "marked_answers_count": marked_answers_count,
+            "marked_answers": marked_answers,
+            "square_count": square_count,
+            "square_coordinates": square_coordinates
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        # Parameter grid untuk sisi kiri
+    start_x_left = 78   # Posisi X awal untuk kolom A (kiri)
+    start_y = 134        # Posisi Y awal untuk baris 1
+    step_x = 25         # Jarak antar kolom (horizontal, antar jawaban)
+    step_y = 32         # Jarak antar baris (vertikal, antar soal)
+
+
+
+        # Parameter grid untuk sisi kanan
+    start_x_right = 253  # Posisi X awal untuk kolom A (kanan)
+    start_y = 134         # Posisi Y awal untuk baris 1
+    step_x = 25          # Jarak antar kolom (horizontal, antar jawaban)
+    step_y = 32          # Jarak antar baris (vertikal, antar soal)
+
+\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+    backup
+
+    import cv2
+import numpy as np
+
+def detect_marked_answers(image_path):
+    # Baca gambar
+    img = cv2.imread(image_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Blur untuk mengurangi noise dan meningkatkan akurasi deteksi lingkaran
+    blurred = cv2.GaussianBlur(gray, (9, 9), 2)
+
+    # Hough Circle Transform untuk deteksi lingkaran
+    circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, dp=2, minDist=11,
+                               param1=488, param2=10, minRadius=9, maxRadius=15)
+
+    marked_answers = []
+    if circles is not None:
+        circles = np.uint16(np.around(circles))  # Bulatkan koordinat lingkaran
+        for circle in circles[0, :]:
+            x, y, r = circle  # Koordinat pusat (x, y) dan radius
+            
+            # Pastikan koordinat berada dalam batas gambar
+            if 0 <= y < img.shape[0] and 0 <= x < img.shape[1]:
+                # Buat mask untuk lingkaran
+                mask = np.zeros_like(gray)
+                cv2.circle(mask, (x, y), r, 255, -1)  # Buat lingkaran penuh di mask
+
+                # Hitung jumlah piksel hitam di dalam lingkaran
+                filled_area = cv2.countNonZero(cv2.bitwise_and(gray, gray, mask=mask))
+
+                # Jika ada piksel hitam di dalam lingkaran, anggap lingkaran terisi
+                if filled_area > 80:  # Anda bisa menyesuaikan ambang batas ini
+                    marked_answers.append((x, y))
+                    # Tandai lingkaran yang terisi
+                    cv2.circle(img, (x, y), r, (0, 255, 0), 2)  # Tandai dengan warna hijau
+
+    # Fungsi untuk mendeteksi kotak hitam
+    def detect_black_squares(gray, img):
+        # Threshold the image to get a binary image where black areas are white
+        _, binary = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)  # Adjust this value as needed
+
+        # Apply morphological operations to clean up the image
+        kernel = np.ones((3, 3), np.uint8)
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)  # Close small holes
+        binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)   # Remove small noise
+
+        # Find contours in the binary image
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        square_coordinates = []
+
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area > 100:  # Adjusted area threshold for better accuracy
+                epsilon = 0.02 * cv2.arcLength(contour, True)  # Adjust epsilon for contour approximation
+                approx = cv2.approxPolyDP(contour, epsilon, True)
+
+                if len(approx) == 4:  # If there are 4 corners, it's likely a square
+                    # Calculate aspect ratio to filter out non-square shapes
+                    x, y, w, h = cv2.boundingRect(approx)
+                    aspect_ratio = float(w) / h
+                    if 0.8 <= aspect_ratio <= 1.2:  # Check if the shape is close to a square
+                        # Extract the coordinates of the square in (x, y) format as integers
+                        square_coords = [(int(point[0][0]), int(point[0][1])) for point in approx]
+                        square_coordinates.extend(square_coords)  # Flatten the list of coordinates
+
+                        # Draw the square with a specified color (red)
+                        cv2.drawContours(img, [approx], -1, (0, 0, 255), 2)  # Mark square with red color
+
+        return len(square_coordinates) // 4, square_coordinates  # Return count and flat coordinates
+
+    # Deteksi kotak hitam
+    square_count, square_coordinates = detect_black_squares(gray, img)
+
+    # Parameter grid untuk sisi kiri
+    start_x_left = 78   # Posisi X awal untuk kolom A (kiri)
+    start_y = 134        # Posisi Y awal untuk baris 1
+    step_x = 25         # Jarak antar kolom (horizontal, antar jawaban)
+    step_y = 32         # Jarak antar baris (vertikal, antar soal)
+
+    # Gambar grid pada img untuk sisi kiri
+    for i in range(0, 11):  # 20 baris
+        cv2.line(img, (start_x_left, start_y + i * step_y), (start_x_left + (5 * step_x), start_y + i * step_y), (255, 0, 0), 1)  # Garis horizontal
+    for j in range(0, 6):  #  5 kolom
+        cv2.line(img, (start_x_left + j * step_x, start_y), (start_x_left + j * step_x, start_y + (10 * step_y)), (255, 0, 0), 1)  # Garis vertikal
+
+    # Parameter grid untuk sisi kanan
+    start_x_right = 253  # Posisi X awal untuk kolom A (kanan)
+    start_y = 134         # Posisi Y awal untuk baris 1
+    step_x = 25          # Jarak antar kolom (horizontal, antar jawaban)
+    step_y = 32          # Jarak antar baris (vertikal, antar soal)
+
+    # Gambar grid pada img untuk sisi kanan
+    for i in range(0, 11):  # 20 baris
+        cv2.line(img, (start_x_right, start_y + i * step_y), (start_x_right + (5 * step_x), start_y + i * step_y), (255, 0, 0), 1)  # Garis horizontal
+    for j in range(0, 6):  # 5 kolom
+        cv2.line(img, (start_x_right + j * step_x, start_y), (start_x_right + j * step_x, start_y + (10 * step_y)), (255, 0, 0), 1)  # Garis vertikal
+
+    # Fungsi pemetaan koordinat ke nomor soal dan jawaban
+    def map_answer_positions(answers, start_x, start_y, step_x, step_y, num_rows=20, num_cols=5):
+        answer_keys = ['A', 'B', 'C', 'D', 'E']
+        results = [None] * num_rows  # Inisialisasi daftar dengan None untuk 20 soal
+
+        for x, y in answers:
+            col = (x - start_x) // step_x  # Kolom jawaban (A-E)
+            row = (y - start_y) // step_y  # Baris (nomor soal)
+
+            if 0 <= row < num_rows and 0 <= col < num_cols:
+                question_num = row + 1  # Nomor soal dimulai dari 1
+                answer = answer_keys[int(col)]  # Jawaban A, B, C, D, atau E
+                
+                # Simpan jawaban pada indeks yang sesuai
+                if results[row] is None:  # Jika belum ada jawaban untuk soal ini
+                    results[row] = (question_num, answer)
+
+        return [result for result in results if result is not None]  # Kembalikan hanya hasil yang tidak None
+
+    # Pemetaan jawaban dari lingkaran terdeteksi
+    mapped_answers_left = map_answer_positions(marked_answers, start_x_left, start_y, step_x, step_y)
+    mapped_answers_right = map_answer_positions(marked_answers, start_x_right, start_y, step_x, step_y)
+
+    # Gabungkan hasil pemetaan jawaban dari kedua sisi
+    mapped_answers = mapped_answers_left + mapped_answers_right
+
+    # Cetak hasil jawaban yang terdeteksi
+    print("Hasil Jawaban yang Terdeteksi:")
+    for question, answer in mapped_answers:
+        print(f"Nomor Soal {question}: Jawaban {answer}")
+
+    # Menambahkan hasil deteksi ke dalam tabel di kotak kedua
+    total_answers = len(mapped_answers)
+    start_y_centered = start_y + (10 * step_y - total_answers * step_y) // 2  # Hitung posisi Y untuk menempatkan di tengah
+
+    for i, (question, answer) in enumerate(mapped_answers):
+        if question <= 10:
+            # Ubah posisi untuk menempatkan di kotak kedua
+            cv2.putText(img, f"{question}: {answer}", (start_x_right + 5, start_y_centered + i * step_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+        else:
+            # Ubah nomor soal untuk sisi kanan agar mulai dari 11
+            adjusted_question_num = question + 10
+            cv2.putText(img, f"{adjusted_question_num}: {answer}", (start_x_right + 5, start_y_centered + (i - 10) * step_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+
+    # Simpan hasil deteksi
+    cv2.imwrite("output_detected_answers.png", img)  # Simpan gambar yang telah ditandai
+
+    return mapped_answers, square_count, square_coordinates  # Kembalikan jawaban terdeteksi dan kotak yang terdeteksi
+
+# Contoh penggunaan
+image_path = "uploaded_image.png"
+detected_answers, square_count, square_coordinates = detect_marked_answers(image_path)
+print("Jawaban Terdeteksi:", detected_answers)
+print("Jumlah Kotak yang Terdeteksi:", square_count)
+print("Koordinat Kotak yang Terdeteksi:", square_coordinates)

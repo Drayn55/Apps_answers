@@ -58,7 +58,7 @@ export default function Home() {
     formData.append("file", file);
 
     try {
-      const res = await fetch("https://web-production-47e2.up.railway.app//process", {
+      const res = await fetch("https://your-project-name.vercel.app/api/process", {
         method: "POST",
         body: formData,
       });
@@ -102,7 +102,7 @@ export default function Home() {
 
   // Fungsi untuk mengambil gambar dari backend
   const fetchImage = async () => {
-    const response = await fetch("http://localhost:5000/get-image");
+    const response = await fetch("https://your-project-name.vercel.app/api/get-image");
     const blob = await response.blob();
     const imageUrl = URL.createObjectURL(blob);
     setImage(imageUrl); // Simpan URL gambar ke state

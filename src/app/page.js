@@ -58,7 +58,7 @@ export default function Home() {
     formData.append("file", file);
 
     try {
-      const res = await fetch("https://api-for-app-answers.vercel.app/process", {
+      const res = await fetch("https://web-production-47e2.up.railway.app//process", {
         method: "POST",
         body: formData,
       });
